@@ -193,24 +193,59 @@ class MatchingAgent:
             matching_skills = extract_matching_skills(resume_skills, jd_skills)
             missing_skills = extract_missing_skills(resume_skills, jd_required_skills)[:10]
         
+        # Ensure all scores are in 0-100 range (already normalized)
+        # suitability_score is already 0-100 from compute_suitability_score
+        semantic_percent = round(max(0.0, min(100.0, semantic_similarity * 100)), 2)
+        skill_percent = round(max(0.0, min(100.0, skill_overlap * 100)), 2)
+        exp_percent = round(max(0.0, min(100.0, experience_relevance * 100)), 2)
+        final_score = round(max(0.0, min(100.0, suitability_score)), 2)
+        
+        # Canonicalize and deduplicate skills
+        from utils.scoring import normalize_skill
+        
+        # Clean matching skills
+        matching_skills_clean = []
+        seen_normalized = set()
+        for skill in matching_skills:
+            normalized = normalize_skill(skill)
+            if normalized and normalized not in seen_normalized:
+                seen_normalized.add(normalized)
+                # Clean up skill display (remove trailing punctuation, title case)
+                skill_clean = skill.strip().rstrip('.,;:!?')
+                if skill_clean:
+                    matching_skills_clean.append(skill_clean)
+        
+        # Clean missing skills
+        missing_skills_clean = []
+        seen_normalized_missing = set()
+        for skill in missing_skills[:10]:  # Limit to top 10
+            normalized = normalize_skill(skill)
+            if normalized and normalized not in seen_normalized_missing:
+                seen_normalized_missing.add(normalized)
+                skill_clean = skill.strip().rstrip('.,;:!?')
+                if skill_clean:
+                    missing_skills_clean.append(skill_clean)
+        
         # Log detailed scoring information with interpretable debug output
         candidate_name = resume_data.get("name", "Unknown")
         logger.info(
-            f"[{candidate_name}] "
-            f"Semantic={semantic_similarity*100:.2f}, "
-            f"Skill={skill_overlap*100:.2f}, "
-            f"Exp={experience_relevance*100:.2f}, "
-            f"Final={suitability_score:.2f}"
+            f"[Analyzer] candidate={candidate_name} "
+            f"semantic={semantic_percent:.2f}% "
+            f"skills_matched={len(matching_skills_clean)} "
+            f"jd_skills={len(jd_skills)} "
+            f"skill_overlap={skill_percent:.2f}% "
+            f"exp_rel={exp_percent:.2f}% "
+            f"final={final_score:.2f}%"
         )
         
         return {
-            "candidate_name": resume_data.get("name", "Unknown"),
-            "suitability_score": suitability_score,
-            "semantic_similarity": round(semantic_similarity * 100, 2),
-            "skill_overlap": round(skill_overlap * 100, 2),
-            "experience_relevance": round(experience_relevance * 100, 2),
-            "matching_skills": matching_skills,
-            "missing_skills": missing_skills[:10],  # Limit to top 10 missing skills
+            "candidate_name": candidate_name,
+            "suitability_score": final_score,  # Already 0-100
+            "semantic_similarity": semantic_percent,  # 0-100
+            "skill_overlap": skill_percent,  # 0-100
+            "experience_relevance": exp_percent,  # 0-100
+            "matching_skills": matching_skills_clean,
+            "missing_skills": missing_skills_clean,
             "resume_data": resume_data,
             "jd_data": jd_data
         }

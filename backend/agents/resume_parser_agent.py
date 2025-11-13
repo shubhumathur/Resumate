@@ -80,27 +80,43 @@ class ResumeParsingAgent:
         return None
     
     def _extract_skills(self, text: str, doc) -> List[str]:
-        """Extract skills from resume."""
+        """Extract skills from resume using master list and section parsing."""
+        import json
+        import os
+        
         skills = []
         
-        # Common technical skills patterns
-        skill_keywords = [
-            'python', 'java', 'javascript', 'typescript', 'c++', 'c#', 'go', 'rust',
-            'react', 'angular', 'vue', 'node.js', 'django', 'flask', 'spring',
-            'tensorflow', 'pytorch', 'keras', 'scikit-learn', 'machine learning',
-            'deep learning', 'nlp', 'computer vision', 'aws', 'azure', 'gcp',
-            'docker', 'kubernetes', 'jenkins', 'git', 'sql', 'nosql', 'mongodb',
-            'postgresql', 'mysql', 'redis', 'elasticsearch', 'kafka', 'spark',
-            'hadoop', 'tableau', 'power bi', 'agile', 'scrum', 'ci/cd'
-        ]
+        # Try to load skills master list
+        skills_master_list = []
+        try:
+            skills_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'skills_master_list.json')
+            if os.path.exists(skills_file):
+                with open(skills_file, 'r', encoding='utf-8') as f:
+                    skills_master_list = json.load(f)
+        except Exception as e:
+            logger.warning(f"Could not load skills master list: {e}")
+            # Fallback to hardcoded list
+            skills_master_list = [
+                'python', 'java', 'javascript', 'typescript', 'c++', 'c#', 'go', 'rust',
+                'react', 'angular', 'vue', 'node.js', 'django', 'flask', 'spring',
+                'tensorflow', 'pytorch', 'keras', 'scikit-learn', 'machine learning',
+                'deep learning', 'nlp', 'computer vision', 'aws', 'azure', 'gcp',
+                'docker', 'kubernetes', 'jenkins', 'git', 'sql', 'nosql', 'mongodb',
+                'postgresql', 'mysql', 'redis', 'elasticsearch', 'kafka', 'spark',
+                'hadoop', 'tableau', 'power bi', 'agile', 'scrum', 'ci/cd'
+            ]
         
         text_lower = text.lower()
         
-        # Find skills mentioned in text
-        for skill in skill_keywords:
-            if skill in text_lower:
-                # Capitalize properly
-                skill_formatted = skill.title() if len(skill.split()) == 1 else skill
+        # Find skills mentioned in text using master list
+        for skill in skills_master_list:
+            skill_lower = skill.lower()
+            if skill_lower in text_lower:
+                # Format skill name
+                if len(skill.split()) == 1:
+                    skill_formatted = skill.title()
+                else:
+                    skill_formatted = skill.title()
                 if skill_formatted not in skills:
                     skills.append(skill_formatted)
         
@@ -114,10 +130,22 @@ class ResumeParsingAgent:
                 items = re.split(r'[,;|•]', line)
                 for item in items:
                     item = item.strip()
+                    # Remove trailing punctuation
+                    item = item.rstrip('.,;:!?')
                     if len(item) > 2 and item not in skills:
                         skills.append(item)
         
-        return skills[:50]  # Limit to top 50 skills
+        # Deduplicate and normalize
+        from utils.scoring import normalize_skill
+        seen_normalized = set()
+        skills_deduped = []
+        for skill in skills:
+            normalized = normalize_skill(skill)
+            if normalized and normalized not in seen_normalized:
+                seen_normalized.add(normalized)
+                skills_deduped.append(skill)
+        
+        return skills_deduped[:50]  # Limit to top 50 skills
     
     def _extract_education(self, text: str, doc) -> Optional[str]:
         """Extract education information."""

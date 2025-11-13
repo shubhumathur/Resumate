@@ -56,11 +56,15 @@ class JDParsingAgent:
         )
         profile_embedding = generate_embeddings(profile_text)
         
+        # Ensure skills_count is the length of unique skills
+        skills_count = len(all_skills) if all_skills else 0
+        
         return {
             "title": title,
             "skills_required": skills_required,
             "skills_preferred": skills_preferred,
             "all_skills": all_skills,
+            "skills_count": skills_count,  # Add explicit skills count
             "experience_required": experience_required,
             "responsibilities": responsibilities,
             "requirements": requirements,
@@ -179,32 +183,52 @@ class JDParsingAgent:
         return requirements[:20]
     
     def _extract_common_skills(self, text: str) -> List[str]:
-        """Extract common technical skills mentioned in text."""
-        common_skill_list = [
-            'python', 'java', 'javascript', 'typescript', 'c++', 'c#', 'go', 'rust',
-            'react', 'angular', 'vue', 'node.js', 'django', 'flask', 'fastapi', 'spring',
-            'tensorflow', 'pytorch', 'keras', 'scikit-learn', 'machine learning',
-            'deep learning', 'nlp', 'natural language processing', 'computer vision',
-            'aws', 'amazon web services', 'azure', 'gcp', 'google cloud',
-            'docker', 'kubernetes', 'jenkins', 'git', 'sql', 'nosql', 'mongodb',
-            'postgresql', 'mysql', 'redis', 'elasticsearch', 'kafka', 'apache spark',
-            'hadoop', 'tableau', 'power bi', 'agile', 'scrum', 'ci/cd', 'terraform',
-            'ansible', 'linux', 'unix', 'rest api', 'graphql', 'microservices'
-        ]
+        """Extract common technical skills mentioned in text using master list."""
+        import json
+        import os
+        
+        # Try to load skills master list
+        skills_master_list = []
+        try:
+            skills_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'skills_master_list.json')
+            if os.path.exists(skills_file):
+                with open(skills_file, 'r', encoding='utf-8') as f:
+                    skills_master_list = json.load(f)
+        except Exception as e:
+            logger.warning(f"Could not load skills master list: {e}")
+            # Fallback to hardcoded list
+            skills_master_list = [
+                'python', 'java', 'javascript', 'typescript', 'c++', 'c#', 'go', 'rust',
+                'react', 'angular', 'vue', 'node.js', 'django', 'flask', 'fastapi', 'spring',
+                'tensorflow', 'pytorch', 'keras', 'scikit-learn', 'machine learning',
+                'deep learning', 'nlp', 'natural language processing', 'computer vision',
+                'aws', 'amazon web services', 'azure', 'gcp', 'google cloud',
+                'docker', 'kubernetes', 'jenkins', 'git', 'sql', 'nosql', 'mongodb',
+                'postgresql', 'mysql', 'redis', 'elasticsearch', 'kafka', 'apache spark',
+                'hadoop', 'tableau', 'power bi', 'agile', 'scrum', 'ci/cd', 'terraform',
+                'ansible', 'linux', 'unix', 'rest api', 'graphql', 'microservices'
+            ]
         
         skills_found = []
         text_lower = text.lower()
         
-        for skill in common_skill_list:
-            if skill in text_lower:
-                # Capitalize properly
-                skill_formatted = skill.title() if len(skill.split()) == 1 else skill
-                skills_found.append(skill_formatted)
+        # Use n-gram matching (1-3 grams) to capture multi-word skills
+        for skill in skills_master_list:
+            skill_lower = skill.lower()
+            # Check for exact match or as part of a phrase
+            if skill_lower in text_lower:
+                # Format skill name (title case for single words, preserve case for multi-word)
+                if len(skill.split()) == 1:
+                    skill_formatted = skill.title()
+                else:
+                    skill_formatted = skill.title()  # Title case for multi-word
+                if skill_formatted not in skills_found:
+                    skills_found.append(skill_formatted)
         
         return skills_found
     
     def _parse_skills_from_text(self, text: str) -> List[str]:
-        """Parse skills from a text block."""
+        """Parse skills from a text block with normalization."""
         skills = []
         
         # Split by common separators
@@ -214,10 +238,25 @@ class JDParsingAgent:
             item = item.strip()
             # Remove common prefixes/suffixes
             item = re.sub(r'^(required|preferred|must have|nice to have)[:\s]*', '', item, flags=re.IGNORECASE)
+            # Remove trailing punctuation
+            item = item.rstrip('.,;:!?')
+            # Remove section prefixes like "Languages:", "Tools:", etc.
+            item = re.sub(r'^(languages?|tools?|frameworks?|technologies?|databases?|platforms?|skills?)[:\s]*', '', item, flags=re.IGNORECASE)
+            item = item.strip()
             if len(item) > 2 and len(item) < 100:
                 skills.append(item)
         
-        return skills
+        # Deduplicate using normalized form
+        from utils.scoring import normalize_skill
+        seen_normalized = set()
+        skills_deduped = []
+        for skill in skills:
+            normalized = normalize_skill(skill)
+            if normalized and normalized not in seen_normalized:
+                seen_normalized.add(normalized)
+                skills_deduped.append(skill)
+        
+        return skills_deduped
     
     def _extract_section(self, text: str, section_names: List[str]) -> Optional[str]:
         """Extract a specific section from JD."""
