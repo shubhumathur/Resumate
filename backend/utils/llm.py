@@ -20,3 +20,4 @@ def generate_analysis(prompt: str) -> str:
     response = model.generate_content(prompt)
     return response.text or ""
 
+

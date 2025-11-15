@@ -69,3 +69,4 @@ def query_similar(text: str, top_k: int = 5) -> List[Dict[str, Any]]:
             results.append(item)
     return results
 
+

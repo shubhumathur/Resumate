@@ -15,3 +15,4 @@ def hybrid_retrieve_context(resume_text: str, jd_text: str, top_k: int = 5) -> D
         "graph_context": graph_context,
     }
 
+

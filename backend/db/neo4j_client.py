@@ -31,3 +31,4 @@ def close_driver():
     driver.close()
     _get_driver.cache_clear()
 
+

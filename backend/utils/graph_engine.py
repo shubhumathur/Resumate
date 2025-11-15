@@ -96,3 +96,4 @@ def fetch_shared_skills(limit: int = 10) -> Iterable[str]:
         )
         return [record["skill"] for record in records]
 
+
